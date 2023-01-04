@@ -1,11 +1,13 @@
 import tcod
 import opensimplex
 import pickle
+import os
 
-WIDTH, HEIGHT = 64, 64  # Console width and height in tiles.
+WIDTH, HEIGHT = 63, 63  # Console width and height in tiles.
 
-WORLD_WIDTH, WORLD_HEIGHT = 128, 128
-
+CHUNK_SIZE = 32
+RENDER_DISTANCE = 2
+WORLD_NAME = "world1"
 SEED = 1234
 
 walls = {} # TEMPORARYGARBAGESHUTUP
@@ -15,6 +17,7 @@ walls = {} # TEMPORARYGARBAGESHUTUP
 tiles = {} # the world's tiles
 entities = {}
 
+# Key commands for possible actions
 KEY_COMMANDS = {
     tcod.event.KeySym.UP: "move N",
     tcod.event.KeySym.DOWN: "move S",
@@ -33,6 +36,7 @@ class Vector2:
     def __repr__(self):
         return f"Vector2({self.x},{self.y})"
 
+# they got shoes for hands bruhhh
 
 class Player:
     def __init__(self):
@@ -48,19 +52,66 @@ class Player:
             self.position.y += self.velocity.y
         self.velocity = Vector2(0,0)
 
+# generate a chunk of the world and store it in file
+
+def generate_chunk(x: int, y: int):
+    # get region of chunk
+    #chunk_region = [Vector2(x*CHUNK_SIZE,y*CHUNK_SIZE), Vector2(x*CHUNK_SIZE + CHUNK_SIZE - 1,y*CHUNK_SIZE + CHUNK_SIZE - 1)]
+    chunk_tiles = {}
+    chunk_noise_map = {}
+    for xx in range(CHUNK_SIZE):
+        for yy in range(CHUNK_SIZE):
+            pos = Vector2(xx+x*CHUNK_SIZE,yy+y*CHUNK_SIZE)
+            chunk_noise_map[pos] = {}
+            opensimplex.seed(SEED) # set seed to the normal seed
+            scale = 10 # bigger the scale the larger the "blobs"
+            chunk_noise_map[pos]["altitude"] = opensimplex.noise2(xx/scale,yy/scale) 
+            opensimplex.seed(SEED + 4) # set seed to a slightly different one
+            scale=5
+            chunk_noise_map[pos]["flora"] = opensimplex.noise2(xx/scale,yy/scale)
+            altitude = chunk_noise_map[pos]["altitude"]
+            flora = chunk_noise_map[pos]["flora"]
+            if altitude >= 0.2:
+                chunk_tiles[pos] = "land"
+            elif altitude < 0.2:
+                chunk_tiles[pos] = "water"
+    with open(f"saves/{WORLD_NAME}/{x},{y}.gchunk","wb+") as f:
+        pickle.dump(chunk_tiles,f, pickle.HIGHEST_PROTOCOL)
+        f.close()
+
+
+
+def load_chunk(x,y):
+    try:
+        chunk_tiles = {}
+        with open(f"saves/{WORLD_NAME}/{x},{y}.gchunk","rb") as f:
+            chunk_tiles = pickle.load(f)
+            for tile in chunk_tiles.keys():
+                tiles[tile] = chunk_tiles[tile]
+            f.close()
+    except:
+        generate_chunk(x,y)
+        load_chunk(x,y)
+
+def unload_chunk(x,y):
+    with open(f"/saves/{WORLD_NAME}/{x},{y}.gchunk","+b") as f:
+        
+        f.close()
+    pass
+
 
 def main():
     """Script entry point."""
 
     player = Player() # create the player instance
 
-    # GENERATE A NEW WORLD (wip)
-
+    load_chunk(-1,-1)
+    load_chunk(-1,1)
+    load_chunk(1,-1)
+    load_chunk(1,1)
     tileset = tcod.tileset.load_tilesheet(
         "data/tiles.png", 16, 16, tcod.tileset.CHARMAP_CP437,
     )
- 
-
 
     # Create a window based on this console and tileset.
     with tcod.context.new(
@@ -73,10 +124,17 @@ def main():
 
             for tilepos in tiles.keys(): # go through the positions
                 tile = tiles[tilepos]
-                console.print(x=tilepos.x, y=tilepos.y, string="█", fg=(128,128,0))
+                tilecolour = (0,0,0)
+
+                if tile == "land":
+                    tilecolour = (64,192,64) # greenish thing
+                elif tile == "water":
+                    tilecolour = (0,64,200) # blueish
+                
+                console.print(x=tilepos.x-player.position.x, y=tilepos.y-player.position.y, string=" ", bg=tilecolour)
             
             # draw the player!!!!!! (awesome)
-            console.print(x=player.position.x, y=player.position.y, string="@")
+            console.print(x=32, y=32, string="@")
             context.present(console)
             flag = False # checking if a move has been made by the player
             # event checking
