@@ -2,10 +2,13 @@ import tcod
 import opensimplex
 import pickle
 import os
+import math
+import threading
+from numpy import sign
 
 WIDTH, HEIGHT = 63, 63  # Console width and height in tiles.
 
-CHUNK_SIZE = 32
+CHUNK_SIZE = 64
 RENDER_DISTANCE = 2
 WORLD_NAME = "world1"
 SEED = 1234
@@ -15,7 +18,10 @@ walls = {} # TEMPORARYGARBAGESHUTUP
 # the world currently being processed
 
 tiles = {} # the world's tiles
+chunks = [] # store what chunks are currently in play
 entities = {}
+
+generation_thread = None # will be set later, just here to be referenced by player
 
 # Key commands for possible actions
 KEY_COMMANDS = {
@@ -24,6 +30,7 @@ KEY_COMMANDS = {
     tcod.event.KeySym.LEFT: "move W",
     tcod.event.KeySym.RIGHT: "move E",
 }
+
 
 class Vector2:
     def __init__(self, x, y):
@@ -44,7 +51,6 @@ class Player:
         self.velocity = Vector2(0,0)
     def update(self):
         # check for x movement to see if there is wall
-        
         if Vector2(self.position.x+self.velocity.x, self.position.y) not in walls:
             self.position.x += self.velocity.x
         # check for y movement to see if there is wall
@@ -52,25 +58,41 @@ class Player:
             self.position.y += self.velocity.y
         self.velocity = Vector2(0,0)
 
+        current_chunk = Vector2(math.floor(self.position.x/CHUNK_SIZE), 
+                        math.floor(self.position.y/CHUNK_SIZE)) # check the current chunk player is in
+        print(current_chunk)
+        print(chunks)
+        render_radius = RENDER_DISTANCE * CHUNK_SIZE
+        # go through surrounding things to see if there are any needed to be generated
+        flag = False
+        for i in range(-1,1):
+            for j in range(-1,1):
+                if Vector2(current_chunk.x+i,current_chunk.y+j) not in chunks:
+                    load_chunk(current_chunk.x+i,current_chunk.y+j)
+            
+
+
+
 # generate a chunk of the world and store it in file
 
 def generate_chunk(x: int, y: int):
-    # get region of chunk
-    #chunk_region = [Vector2(x*CHUNK_SIZE,y*CHUNK_SIZE), Vector2(x*CHUNK_SIZE + CHUNK_SIZE - 1,y*CHUNK_SIZE + CHUNK_SIZE - 1)]
+    print(f"Generating chunk {x},{y}...")
     chunk_tiles = {}
     chunk_noise_map = {}
+    # go through each tile in the chunk noise
     for xx in range(CHUNK_SIZE):
         for yy in range(CHUNK_SIZE):
             pos = Vector2(xx+x*CHUNK_SIZE,yy+y*CHUNK_SIZE)
             chunk_noise_map[pos] = {}
             opensimplex.seed(SEED) # set seed to the normal seed
-            scale = 10 # bigger the scale the larger the "blobs"
+            scale = 20 # enlarge the scale of the "blobs"
             chunk_noise_map[pos]["altitude"] = opensimplex.noise2(xx/scale,yy/scale) 
             opensimplex.seed(SEED + 4) # set seed to a slightly different one
-            scale=5
+            scale=10
             chunk_noise_map[pos]["flora"] = opensimplex.noise2(xx/scale,yy/scale)
             altitude = chunk_noise_map[pos]["altitude"]
             flora = chunk_noise_map[pos]["flora"]
+            # decide on what tiles should be what depending on variables given
             if altitude >= 0.2:
                 chunk_tiles[pos] = "land"
             elif altitude < 0.2:
@@ -79,11 +101,10 @@ def generate_chunk(x: int, y: int):
         pickle.dump(chunk_tiles,f, pickle.HIGHEST_PROTOCOL)
         f.close()
 
-
-
 def load_chunk(x,y):
     try:
         chunk_tiles = {}
+        chunks.append(Vector2(x,y))
         with open(f"saves/{WORLD_NAME}/{x},{y}.gchunk","rb") as f:
             chunk_tiles = pickle.load(f)
             for tile in chunk_tiles.keys():
@@ -101,12 +122,13 @@ def unload_chunk(x,y):
 
 
 def main():
-    """Script entry point."""
+    """Script entry point. Start the gaming."""
 
     player = Player() # create the player instance
 
     load_chunk(-1,-1)
     load_chunk(-1,1)
+    load_chunk(0,0)
     load_chunk(1,-1)
     load_chunk(1,1)
     tileset = tcod.tileset.load_tilesheet(
@@ -130,7 +152,6 @@ def main():
                     tilecolour = (64,192,64) # greenish thing
                 elif tile == "water":
                     tilecolour = (0,64,200) # blueish
-                
                 console.print(x=tilepos.x-player.position.x, y=tilepos.y-player.position.y, string=" ", bg=tilecolour)
             
             # draw the player!!!!!! (awesome)
