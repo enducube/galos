@@ -11,7 +11,7 @@ WIDTH, HEIGHT = 63, 63  # Console width and height in tiles.
 CHUNK_SIZE = 64
 RENDER_DISTANCE = 2
 WORLD_NAME = "world1"
-SEED = 1234
+SEED = 123
 
 walls = {} # TEMPORARYGARBAGESHUTUP
 
@@ -21,7 +21,7 @@ tiles = {} # the world's tiles
 chunks = [] # store what chunks are currently in play
 entities = {}
 
-generation_thread = None # will be set later, just here to be referenced by player
+generation_thread = None # will be set later, just here to be referenced by load_chunk
 
 # Key commands for possible actions
 KEY_COMMANDS = {
@@ -60,13 +60,13 @@ class Player:
 
         current_chunk = Vector2(math.floor(self.position.x/CHUNK_SIZE), 
                         math.floor(self.position.y/CHUNK_SIZE)) # check the current chunk player is in
+        print(self.position)
         print(current_chunk)
-        print(chunks)
         render_radius = RENDER_DISTANCE * CHUNK_SIZE
         # go through surrounding things to see if there are any needed to be generated
         flag = False
-        for i in range(-1,1):
-            for j in range(-1,1):
+        for i in range(-1,2):
+            for j in range(-1,2):
                 if Vector2(current_chunk.x+i,current_chunk.y+j) not in chunks:
                     load_chunk(current_chunk.x+i,current_chunk.y+j)
             
@@ -79,6 +79,7 @@ def generate_chunk(x: int, y: int):
     print(f"Generating chunk {x},{y}...")
     chunk_tiles = {}
     chunk_noise_map = {}
+    print(x*CHUNK_SIZE,y*CHUNK_SIZE)
     # go through each tile in the chunk noise
     for xx in range(CHUNK_SIZE):
         for yy in range(CHUNK_SIZE):
@@ -86,10 +87,10 @@ def generate_chunk(x: int, y: int):
             chunk_noise_map[pos] = {}
             opensimplex.seed(SEED) # set seed to the normal seed
             scale = 20 # enlarge the scale of the "blobs"
-            chunk_noise_map[pos]["altitude"] = opensimplex.noise2(xx/scale,yy/scale) 
+            chunk_noise_map[pos]["altitude"] = opensimplex.noise2(pos.x/scale,pos.y/scale) 
             opensimplex.seed(SEED + 4) # set seed to a slightly different one
             scale=10
-            chunk_noise_map[pos]["flora"] = opensimplex.noise2(xx/scale,yy/scale)
+            chunk_noise_map[pos]["flora"] = opensimplex.noise2(pos.x/scale,pos.y/scale)
             altitude = chunk_noise_map[pos]["altitude"]
             flora = chunk_noise_map[pos]["flora"]
             # decide on what tiles should be what depending on variables given
@@ -100,6 +101,9 @@ def generate_chunk(x: int, y: int):
     with open(f"saves/{WORLD_NAME}/{x},{y}.gchunk","wb+") as f:
         pickle.dump(chunk_tiles,f, pickle.HIGHEST_PROTOCOL)
         f.close()
+    load_chunk(x,y)
+
+
 
 def load_chunk(x,y):
     try:
@@ -111,8 +115,11 @@ def load_chunk(x,y):
                 tiles[tile] = chunk_tiles[tile]
             f.close()
     except:
-        generate_chunk(x,y)
-        load_chunk(x,y)
+        
+        generation_thread = threading.Thread(target=generate_chunk,args=(x,y,),daemon=True)
+        generation_thread.start()
+        #generation_thread.join()
+        
 
 def unload_chunk(x,y):
     with open(f"/saves/{WORLD_NAME}/{x},{y}.gchunk","+b") as f:
@@ -120,17 +127,11 @@ def unload_chunk(x,y):
         f.close()
     pass
 
-
+       
 def main():
     """Script entry point. Start the gaming."""
 
     player = Player() # create the player instance
-
-    load_chunk(-1,-1)
-    load_chunk(-1,1)
-    load_chunk(0,0)
-    load_chunk(1,-1)
-    load_chunk(1,1)
     tileset = tcod.tileset.load_tilesheet(
         "data/tiles.png", 16, 16, tcod.tileset.CHARMAP_CP437,
     )
@@ -143,23 +144,23 @@ def main():
         console = context.new_console(WIDTH,HEIGHT,4,"F")
         while True:  # main loop, where cool stuff happens!!!!!!
             console.clear() 
-
-            for tilepos in tiles.keys(): # go through the positions
-                tile = tiles[tilepos]
-                tilecolour = (0,0,0)
-
-                if tile == "land":
-                    tilecolour = (64,192,64) # greenish thing
-                elif tile == "water":
-                    tilecolour = (0,64,200) # blueish
-                console.print(x=tilepos.x-player.position.x, y=tilepos.y-player.position.y, string=" ", bg=tilecolour)
-            
+            try:
+                for tilepos in tiles.keys(): # go through the positions
+                    tile = tiles[tilepos]
+                    tilecolour = (0,0,0)
+                    if tile == "land":
+                        tilecolour = (64,192,64) # greenish thing
+                    elif tile == "water":
+                        tilecolour = (0,64,200) # blueish
+                    console.print(x=tilepos.x-player.position.x + 32, y=tilepos.y-player.position.y + 32, string=" ", bg=tilecolour)
+            except:
+                pass
             # draw the player!!!!!! (awesome)
             console.print(x=32, y=32, string="@")
             context.present(console)
             flag = False # checking if a move has been made by the player
             # event checking
-            for event in tcod.event.wait():
+            for event in tcod.event.get():
                 context.convert_event(event)
                 #print(event)  # Print event names and attributes.
                 match event:
@@ -181,7 +182,7 @@ def main():
                     case tcod.event.MouseButtonDown(tile=tile):
                         if event.button == tcod.event.BUTTON_LEFT:
                             print(event.tile)
-                            walls[Vector2(event.tile.x,event.tile.y)] = True
+                            tiles[Vector2(event.tile.x,event.tile.y)] = "land"
                 if isinstance(event, tcod.event.Quit): # quitting like loser!!!
                     raise SystemExit()
             if flag:
@@ -191,4 +192,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_thread = threading.Thread(target=main)
+    main_thread.start()
