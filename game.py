@@ -4,7 +4,7 @@ import pickle
 import os
 import math
 import threading
-from numpy import sign
+from numpy import sign, polynomial
 
 WIDTH, HEIGHT = 63, 63  # Console width and height in tiles.
 
@@ -49,6 +49,8 @@ class Player:
     def __init__(self):
         self.position = Vector2(5,5)
         self.velocity = Vector2(0,0)
+        self.health = 10
+        self.inventory = []
     def update(self):
         # check for x movement to see if there is wall
         if Vector2(self.position.x+self.velocity.x, self.position.y) not in walls:
@@ -70,8 +72,21 @@ class Player:
                 if Vector2(current_chunk.x+i,current_chunk.y+j) not in chunks:
                     load_chunk(current_chunk.x+i,current_chunk.y+j)
             
+# circle get all tiles whatever
+def circle_tiles(centre: Vector2, view_radius:int):
+    tiles_in_circle = []
+    for i in range(centre.y-view_radius,centre.y+view_radius + 1):
+        # i will be the y value
+        x_values = [
+            math.ceil(-math.sqrt( (view_radius**2) - (i-centre.y)**2 ) + centre.x),
+            math.floor(math.sqrt( (view_radius**2) - (i-centre.y)**2 ) + centre.x)
+            ]
+        # get all tiles inbetween
+        for j in range(x_values[0],x_values[1]+1):
+            tiles_in_circle.append(Vector2(j,i))
+    return tiles_in_circle
 
-
+## CHUNK STUFF!!!!!!!!!!!!!!!!!!!!!!!!!!1
 
 # generate a chunk of the world and store it in file
 
@@ -123,8 +138,9 @@ def load_chunk(x,y):
 
 def unload_chunk(x,y):
     with open(f"/saves/{WORLD_NAME}/{x},{y}.gchunk","+b") as f:
-        
+
         f.close()
+    chunks.pop(chunks.index(Vector2(x,y)))
     pass
 
        
@@ -145,7 +161,7 @@ def main():
         while True:  # main loop, where cool stuff happens!!!!!!
             console.clear() 
             try:
-                for tilepos in tiles.keys(): # go through the positions
+                for tilepos in circle_tiles(player.position, 8): # go through the positions
                     tile = tiles[tilepos]
                     tilecolour = (0,0,0)
                     if tile == "land":
