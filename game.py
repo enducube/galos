@@ -5,6 +5,8 @@ import os
 import math
 import threading
 from numpy import sign, polynomial
+from objects import Tile
+from structures import Vector2
 
 WIDTH, HEIGHT = 63, 63  # Console width and height in tiles.
 
@@ -32,17 +34,6 @@ KEY_COMMANDS = {
 }
 
 
-class Vector2:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-    def __hash__(self):
-        return hash((self.x,self.y))
-    def __eq__(self, __o: object):
-        return (self.x,self.y) == (__o.x,__o.y)
-    def __repr__(self):
-        return f"Vector2({self.x},{self.y})"
-
 # they got shoes for hands bruhhh
 
 class Player:
@@ -62,8 +53,6 @@ class Player:
 
         current_chunk = Vector2(math.floor(self.position.x/CHUNK_SIZE), 
                         math.floor(self.position.y/CHUNK_SIZE)) # check the current chunk player is in
-        print(self.position)
-        print(current_chunk)
         render_radius = RENDER_DISTANCE * CHUNK_SIZE
         # go through surrounding things to see if there are any needed to be generated
         flag = False
@@ -94,14 +83,14 @@ def generate_chunk(x: int, y: int):
     print(f"Generating chunk {x},{y}...")
     chunk_tiles = {}
     chunk_noise_map = {}
-    print(x*CHUNK_SIZE,y*CHUNK_SIZE)
+    #print(x*CHUNK_SIZE,y*CHUNK_SIZE)
     # go through each tile in the chunk noise
     for xx in range(CHUNK_SIZE):
         for yy in range(CHUNK_SIZE):
             pos = Vector2(xx+x*CHUNK_SIZE,yy+y*CHUNK_SIZE)
             chunk_noise_map[pos] = {}
             opensimplex.seed(SEED) # set seed to the normal seed
-            scale = 20 # enlarge the scale of the "blobs"
+            scale = 40 # enlarge the scale of the "blobs"
             chunk_noise_map[pos]["altitude"] = opensimplex.noise2(pos.x/scale,pos.y/scale) 
             opensimplex.seed(SEED + 4) # set seed to a slightly different one
             scale=10
@@ -109,12 +98,15 @@ def generate_chunk(x: int, y: int):
             altitude = chunk_noise_map[pos]["altitude"]
             flora = chunk_noise_map[pos]["flora"]
             # decide on what tiles should be what depending on variables given
-            if altitude >= 0.2:
-                chunk_tiles[pos] = "land"
+            if altitude >= 0.25:
+                chunk_tiles[pos] = Tile(pos.x,pos.y,"grass")
+            elif altitude<0.25 and altitude >= 0.2:
+                chunk_tiles[pos] = Tile(pos.x,pos.y,"grass")
             elif altitude < 0.2:
-                chunk_tiles[pos] = "water"
+                chunk_tiles[pos] = Tile(pos.x,pos.y,"water")
     with open(f"saves/{WORLD_NAME}/{x},{y}.gchunk","wb+") as f:
         pickle.dump(chunk_tiles,f, pickle.HIGHEST_PROTOCOL)
+        print("saved")
         f.close()
     load_chunk(x,y)
 
@@ -149,30 +141,29 @@ def main():
 
     player = Player() # create the player instance
     tileset = tcod.tileset.load_tilesheet(
-        "data/tiles.png", 16, 16, tcod.tileset.CHARMAP_CP437,
+        "data/tiles2.png", 16, 16, tcod.tileset.CHARMAP_CP437,
     )
 
     # Create a window based on this console and tileset.
     with tcod.context.new(
-        width=512, height=512, tileset=tileset, title="Galos",
+        width=768, height=768, tileset=tileset, title="Galos",
     ) as context:
         # create the goddamn console already!!
         console = context.new_console(WIDTH,HEIGHT,4,"F")
         while True:  # main loop, where cool stuff happens!!!!!!
-            console.clear() 
+            console.clear(bg=(45, 50, 70))
             try:
-                for tilepos in circle_tiles(player.position, 8): # go through the positions
+                for tilepos in circle_tiles(player.position, 16): # go through the positions
                     tile = tiles[tilepos]
-                    tilecolour = (0,0,0)
-                    if tile == "land":
-                        tilecolour = (64,192,64) # greenish thing
-                    elif tile == "water":
-                        tilecolour = (0,64,200) # blueish
-                    console.print(x=tilepos.x-player.position.x + 32, y=tilepos.y-player.position.y + 32, string=" ", bg=tilecolour)
+                    console.print(x=tilepos.x-player.position.x + 32, 
+                                  y=tilepos.y-player.position.y + 32,
+                                  string=tile.char,
+                                  bg=tile.tile_bg, fg=tile.tile_colour)
             except:
                 pass
             # draw the player!!!!!! (awesome)
-            console.print(x=32, y=32, string="@")
+            console.print(x=32, y=32, string="@",fg=(255,255,255))
+            #console.draw_rect(0,48,63,15,ord("█"),(255,255,255))
             context.present(console)
             flag = False # checking if a move has been made by the player
             # event checking
@@ -181,7 +172,6 @@ def main():
                 #print(event)  # Print event names and attributes.
                 match event:
                     case tcod.event.KeyDown(sym=sym) if sym in KEY_COMMANDS:
-
                         match KEY_COMMANDS[sym]:
                             # movement
                             case "move S":
