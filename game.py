@@ -10,10 +10,10 @@ from structures import Vector2
 
 WIDTH, HEIGHT = 63, 63  # Console width and height in tiles.
 
-CHUNK_SIZE = 64
+CHUNK_SIZE = 32
 RENDER_DISTANCE = 2
 WORLD_NAME = "world1"
-SEED = 123
+SEED = 5678
 
 walls = {} # TEMPORARYGARBAGESHUTUP
 
@@ -98,10 +98,10 @@ def generate_chunk(x: int, y: int):
             altitude = chunk_noise_map[pos]["altitude"]
             flora = chunk_noise_map[pos]["flora"]
             # decide on what tiles should be what depending on variables given
-            if altitude >= 0.25:
+            if altitude >= 0.32:
                 chunk_tiles[pos] = Tile(pos.x,pos.y,"grass")
-            elif altitude<0.25 and altitude >= 0.2:
-                chunk_tiles[pos] = Tile(pos.x,pos.y,"grass")
+            elif altitude<0.32 and altitude >= 0.2:
+                chunk_tiles[pos] = Tile(pos.x,pos.y,"sand")
             elif altitude < 0.2:
                 chunk_tiles[pos] = Tile(pos.x,pos.y,"water")
     with open(f"saves/{WORLD_NAME}/{x},{y}.gchunk","wb+") as f:
@@ -149,7 +149,7 @@ def main():
         width=768, height=768, tileset=tileset, title="Galos",
     ) as context:
         # create the goddamn console already!!
-        console = context.new_console(WIDTH,HEIGHT,4,"F")
+        console = context.new_console(WIDTH,HEIGHT,2,"F")
         while True:  # main loop, where cool stuff happens!!!!!!
             console.clear(bg=(45, 50, 70))
             try:
@@ -164,7 +164,7 @@ def main():
             # draw the player!!!!!! (awesome)
             console.print(x=32, y=32, string="@",fg=(255,255,255))
             #console.draw_rect(0,48,63,15,ord("█"),(255,255,255))
-            context.present(console)
+            context.present(console, integer_scaling=True,keep_aspect=True)
             flag = False # checking if a move has been made by the player
             # event checking
             for event in tcod.event.get():

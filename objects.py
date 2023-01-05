@@ -20,3 +20,7 @@ class Tile: # A tile in the world
                 self.char = "≈"
                 self.tile_bg = (0, 0, 64)
                 self.tile_colour = (65,65,185)
+            case "sand":
+                self.char = "▒"
+                self.tile_bg = (245, 222, 179)
+                self.tile_colour = (222,184,135)
